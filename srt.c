@@ -7,7 +7,7 @@
 
 
 typedef struct Srt{
-  float offset;
+  int offset;
   const char* pathname;
 }Srt;
 
@@ -28,10 +28,10 @@ with the correct values.
 int check_command(int argc,const char* argv[], struct Srt* SRT ){
     int o=0,f=3;
     if (argc <= 2 ){
-      print_helper("type -h or --help for help");
+      print_helper("too few argument: type -h or --help for help");
       return 0;
     }
-    if ( strcmp("-o",argv[1])==0 && (atof(argv[2])*atof(argv[2])) ){
+    if ( strcmp("-o",argv[1])==0 && (atoi(argv[2])*atoi(argv[2])) ){
       o=2;
       f=3;
     }
@@ -56,7 +56,7 @@ int check_command(int argc,const char* argv[], struct Srt* SRT ){
       }
       if(argc>1 && access( argv[f], F_OK ) != -1 ) {
         SRT->pathname=argv[f];
-        SRT->offset=atof(argv[o]);
+        SRT->offset=atoi(argv[o]);
         return 1;
       }
       else {
@@ -69,12 +69,21 @@ int check_command(int argc,const char* argv[], struct Srt* SRT ){
   }
 
 
-
 void do_job(struct Srt* SRT){
-  int sec_d=0, sec_u=0,min_d=0,min_u=0,h_d=0,h_u=0;//cooment
+  int sec_d_f=0, sec_u_f=0;//cooment
+  int sec_d_to=0, sec_u_to=0;//cooment
+  int offset=SRT->offset;
+  int pathname_len=strlen(SRT->pathname);
+  char path[pathname_len];
+  int sec_from_txt,min_from_txt,hour_from_txt;
+  int sec_to_txt,min_to_txt,hour_to_txt;
+  int tot_sec_from=0;
+  strncpy(path, SRT->pathname,pathname_len-4);//4 is for .srt
 
   FILE* f=fopen(SRT->pathname, "r+");
-  if (!f){
+  FILE* fout=fopen(  strcat( path,"OFFSET.srt") , "w+");
+
+  if (!f || !fout){
     print_helper("file not opened");
     return;
   }
@@ -82,22 +91,79 @@ void do_job(struct Srt* SRT){
   while( fgets(line,256, f)!=NULL ){
 
     if(strstr(line, "-->") != NULL) {
-        float sec_from=(line[6]-'0')*10 + (line[7]-'0');
-        float sec_to=(line[23]-'0')*10 + (line[24]-'0');
-        printf("%f   %f %f\n",SRT->offset,sec_from,sec_to );
-        printf("%f   %f %f\n",SRT->offset,sec_from+SRT->offset,sec_to+SRT->offset );
-        printf("%c\n",'21'+'3'-'0' );
+      sec_from_txt = (line[6]-'0')*10 + (line[7]-'0');
+      min_from_txt = (line[3]-'0')*10 + (line[4]-'0');
+      hour_from_txt = (line[0]-'0')*10 + (line[1]-'0');
+      tot_sec_from=hour_from_txt*60*60+min_from_txt*60+sec_from_txt+offset;
+
+      if (offset<0 && tot_sec_from<0){
+        print_wrong_usage("offset too negative");
+        return ;
+      }
+      sec_to_txt=(line[23]-'0')*10 + (line[24]-'0');
+      min_to_txt=(line[20]-'0')*10 + (line[21]-'0');
+      hour_to_txt=(line[17]-'0')*10 + (line[18]-'0');
+      if (offset+sec_from_txt > 60 ){
+        min_from_txt=min_from_txt+(sec_from_txt+offset)/60;
+        sec_from_txt=(sec_from_txt+offset)%60;
+      }
+      else if(offset+sec_to_txt > 60){
+        min_from_txt=min_from_txt+(sec_from_txt+offset)/60;
+        sec_from_txt=(sec_from_txt+offset)%60;
+      }
+      else {
+      }
+      //very sad thing to do
+      char c[2];
+      sprintf(c, "%.2d",sec_from_txt+offset);
+      line[6]=c[0];
+      line[7]=c[1];
+      sprintf (c, "%d",min_from_txt);
+      if(min_from_txt < 10){
+        line[3]='0';
+        line[4]=c[0];
+      }
+      else {
+        line[3]=c[0];
+        line[4]=c[1];
+      }
+      sprintf (c, "%.2d",hour_from_txt);
+      if (hour_from_txt <10 ) {
+        line[0]='0';
+        line[1]=c[0];
+      }
+      else {
+        line[0]=c[0];
+        line[1]=c[1];
+      }
+      sprintf(c, "%.2d",sec_to_txt+offset);
+      line[23]=c[0];
+      line[24]=c[1];
+      sprintf(c, "%.2d",min_to_txt);
+      line[20]=c[0];
+      line[21]=c[1];
+      sprintf(c, "%.2d",hour_to_txt);
+      if (hour_to_txt == 0) {
+        line[17]='0';
+        line[18]=c[0];
+      }
+      else {
+        line[17]=c[0];
+        line[18 ]=c[1];
+      }
     }
-      scanf("%s\n",line );
+    fprintf(fout, "%s",line );
   }
+  fclose(f);
+  fclose(fout);
 }
 
 
 int main(int argc, char const *argv[]) {
   Srt* sub=(Srt*)malloc(sizeof( Srt));
-  char path[265];
-  sub->pathname=path;
+  //char path[265];
   short command_line_ok=check_command(argc,argv,sub);
+  //sub->pathname=path;
   if ( command_line_ok ){
       do_job(sub);
   }
